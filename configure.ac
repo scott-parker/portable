@@ -57,14 +57,10 @@ AC_CHECK_HEADERS([err.h])
 AC_ARG_WITH([openssldir],
 	AS_HELP_STRING([--with-openssldir],
 		       [Set the default openssl directory]),
-	AC_DEFINE_UNQUOTED(OPENSSLDIR, "$withval")
+	OPENSSLDIR="$withval"
+	AC_SUBST(OPENSSLDIR)
 )
-
-AC_ARG_WITH([enginesdir],
-	AS_HELP_STRING([--with-enginesdir],
-		       [Set the default engines directory (use with openssldir)]),
-	AC_DEFINE_UNQUOTED(ENGINESDIR, "$withval")
-)
+AM_CONDITIONAL([OPENSSLDIR_DEFINED], [test x$with_openssldir != x])
 
 AC_ARG_ENABLE([extratests],
 	AS_HELP_STRING([--enable-extratests], [Enable extra tests that may be unreliable on some platforms]))

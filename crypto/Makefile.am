@@ -10,13 +10,20 @@ EXTRA_DIST = VERSION
 
 libcrypto_la_LDFLAGS = -version-info @LIBCRYPTO_VERSION@ -no-undefined
 libcrypto_la_LIBADD = libcompat.la libcompatnoopt.la
-libcrypto_la_CPPFLAGS = -DOPENSSL_NO_HW_PADLOCK
+libcrypto_la_CPPFLAGS = -DLIBRESSL_INTERNAL
+libcrypto_la_CPPFLAGS += -DOPENSSL_NO_HW_PADLOCK
 if OPENSSL_NO_ASM
 libcrypto_la_CPPFLAGS += -DOPENSSL_NO_ASM
 else
 if HOST_WIN
 libcrypto_la_CPPFLAGS += -DOPENSSL_NO_ASM
 endif
+endif
+
+if OPENSSLDIR_DEFINED
+libcrypto_la_CPPFLAGS += -DOPENSSLDIR=\"@OPENSSLDIR@\"
+else
+libcrypto_la_CPPFLAGS += -DOPENSSLDIR=\"$(sysconfdir)/ssl\"
 endif
 
 noinst_LTLIBRARIES = libcompat.la libcompatnoopt.la
