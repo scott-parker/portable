@@ -1,7 +1,7 @@
 #!/bin/sh
 set -e
 
-rm -f man/*.1 man/*.3
+rm -f man/*.[35] include/openssl/*.h
 ./autogen.sh
 ./configure
-make distcheck
+make -j2 distcheck

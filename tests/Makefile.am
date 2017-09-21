@@ -3,15 +3,23 @@ include $(top_srcdir)/Makefile.am.common
 AM_CPPFLAGS += -I $(top_srcdir)/crypto/modes
 AM_CPPFLAGS += -I $(top_srcdir)/crypto/asn1
 AM_CPPFLAGS += -I $(top_srcdir)/ssl
-AM_CPPFLAGS += -I $(top_srcdir)/apps
+AM_CPPFLAGS += -I $(top_srcdir)/apps/openssl
+AM_CPPFLAGS += -I $(top_srcdir)/apps/openssl/compat
+AM_CPPFLAGS += -D_PATH_SSL_CA_FILE=\"$(top_srcdir)/apps/openssl/cert.pem\"
 
-LDADD = $(PLATFORM_LDADD) $(PROG_LDADD)
-LDADD += $(top_builddir)/ssl/libssl.la
-LDADD += $(top_builddir)/crypto/libcrypto.la
+LDADD = $(abs_top_builddir)/tls/.libs/libtls.a
+LDADD += $(abs_top_builddir)/ssl/.libs/libssl.a
+LDADD += $(abs_top_builddir)/crypto/.libs/libcrypto.a
+LDADD += $(PLATFORM_LDADD) $(PROG_LDADD)
+if HOST_ASM_MACOSX_X86_64
+LDADD += $(abs_top_builddir)/crypto/.libs/libcrypto_la-cpuid-macosx-x86_64.o
+endif
+
+TEST_LOG_DRIVER = env AM_TAP_AWK='$(AWK)' $(SHELL) $(top_srcdir)/tap-driver.sh
 
 TESTS =
 check_PROGRAMS =
-EXTRA_DIST =
+EXTRA_DIST = CMakeLists.txt
 DISTCLEANFILES = pidwraptest.txt
 
 # aeadtest
@@ -40,6 +48,11 @@ TESTS += asn1test
 check_PROGRAMS += asn1test
 asn1test_SOURCES = asn1test.c
 
+# asn1time
+TESTS += asn1time
+check_PROGRAMS += asn1time
+asn1time_SOURCES = asn1time.c
+
 # base64test
 TESTS += base64test
 check_PROGRAMS += base64test
@@ -60,6 +73,7 @@ endif
 
 # bntest
 TESTS += bntest
+bntest_CPPFLAGS = $(AM_CPPFLAGS) -ULIBRESSL_INTERNAL
 check_PROGRAMS += bntest
 bntest_SOURCES = bntest.c
 
@@ -88,6 +102,11 @@ noinst_HEADERS = tests.h
 TESTS += cipherstest
 check_PROGRAMS += cipherstest
 cipherstest_SOURCES = cipherstest.c
+
+# clienttest
+TESTS += clienttest
+check_PROGRAMS += clienttest
+clienttest_SOURCES = clienttest.c
 
 # cts128test
 TESTS += cts128test
@@ -144,7 +163,7 @@ TESTS += explicit_bzero
 check_PROGRAMS += explicit_bzero
 explicit_bzero_SOURCES = explicit_bzero.c
 if !HAVE_MEMMEM
-explicit_bzero_SOURCES += memmem.c
+explicit_bzero_SOURCES += compat/memmem.c
 endif
 endif
 endif
@@ -152,7 +171,14 @@ endif
 # exptest
 TESTS += exptest
 check_PROGRAMS += exptest
+exptest_CPPFLAGS = $(AM_CPPFLAGS) -ULIBRESSL_INTERNAL
 exptest_SOURCES = exptest.c
+
+# freenull
+TESTS += freenull
+check_PROGRAMS += freenull
+freenull_CPPFLAGS = $(AM_CPPFLAGS) -ULIBRESSL_INTERNAL
+freenull_SOURCES = freenull.c
 
 # gcm128test
 TESTS += gcm128test
@@ -163,6 +189,11 @@ gcm128test_SOURCES = gcm128test.c
 TESTS += gost2814789t
 check_PROGRAMS += gost2814789t
 gost2814789t_SOURCES = gost2814789t.c
+
+# hkdf_test
+TESTS += hkdftest
+check_PROGRAMS += hkdftest
+hkdftest_SOURCES = hkdf_test.c
 
 # hmactest
 TESTS += hmactest
@@ -194,6 +225,14 @@ TESTS += mont
 check_PROGRAMS += mont
 mont_SOURCES = mont.c
 
+# ocsp_test
+if ENABLE_EXTRATESTS
+TESTS += ocsptest.sh
+check_PROGRAMS += ocsp_test
+ocsp_test_SOURCES = ocsp_test.c
+endif
+EXTRA_DIST += ocsptest.sh ocsptest.bat
+
 # optionstest
 TESTS += optionstest
 check_PROGRAMS += optionstest
@@ -208,10 +247,11 @@ pbkdf2_SOURCES = pbkdf2.c
 # pidwraptest relies on an OS-specific way to give out pids and is generally
 # awkward on systems with slow fork
 if ENABLE_EXTRATESTS
-TESTS += pidwraptest
+TESTS += pidwraptest.sh
 check_PROGRAMS += pidwraptest
 pidwraptest_SOURCES = pidwraptest.c
 endif
+EXTRA_DIST += pidwraptest.sh
 
 # pkcs7test
 TESTS += pkcs7test
@@ -227,7 +267,7 @@ poly1305test_SOURCES = poly1305test.c
 TESTS += pq_test.sh
 check_PROGRAMS += pq_test
 pq_test_SOURCES = pq_test.c
-EXTRA_DIST += pq_test.sh
+EXTRA_DIST += pq_test.sh pq_test.bat
 EXTRA_DIST += pq_expected.txt
 
 # randtest
@@ -245,10 +285,31 @@ TESTS += rc4test
 check_PROGRAMS += rc4test
 rc4test_SOURCES = rc4test.c
 
+# rfc5280time
+check_PROGRAMS += rfc5280time
+rfc5280time_SOURCES = rfc5280time.c
+if SMALL_TIME_T
+TESTS += rfc5280time_small.test
+else
+TESTS += rfc5280time
+endif
+EXTRA_DIST += rfc5280time_small.test
+
 # rmdtest
 TESTS += rmdtest
 check_PROGRAMS += rmdtest
 rmdtest_SOURCES = rmdtest.c
+
+# rsa_test
+TESTS += rsa_test
+check_PROGRAMS += rsa_test
+rsa_test_SOURCES = rsa_test.c
+
+# servertest
+TESTS += servertest.sh
+check_PROGRAMS += servertest
+servertest_SOURCES = servertest.c
+EXTRA_DIST += servertest.sh servertest.bat
 
 # sha1test
 TESTS += sha1test
@@ -265,38 +326,72 @@ TESTS += sha512test
 check_PROGRAMS += sha512test
 sha512test_SOURCES = sha512test.c
 
-# shatest
-TESTS += shatest
-check_PROGRAMS += shatest
-shatest_SOURCES = shatest.c
+# ssl_versions
+TESTS += ssl_versions
+check_PROGRAMS += ssl_versions
+ssl_versions_SOURCES = ssl_versions.c
 
 # ssltest
 TESTS += ssltest.sh
 check_PROGRAMS += ssltest
 ssltest_SOURCES = ssltest.c
-EXTRA_DIST += ssltest.sh
-EXTRA_DIST += testssl ca.pem server.pem
+EXTRA_DIST += ssltest.sh ssltest.bat
+EXTRA_DIST += testssl testssl.bat ca.pem server.pem
 
 # testdsa
 TESTS += testdsa.sh
-EXTRA_DIST += testdsa.sh
+EXTRA_DIST += testdsa.sh testdsa.bat
 EXTRA_DIST += openssl.cnf
 
 # testenc
 TESTS += testenc.sh
-EXTRA_DIST += testenc.sh
+EXTRA_DIST += testenc.sh testenc.bat
 
 # testrsa
 TESTS += testrsa.sh
-EXTRA_DIST += testrsa.sh
+EXTRA_DIST += testrsa.sh testrsa.bat
 
 # timingsafe
 TESTS += timingsafe
 check_PROGRAMS += timingsafe
 timingsafe_SOURCES = timingsafe.c
 
+# tlsexttest
+TESTS += tlsexttest
+check_PROGRAMS += tlsexttest
+tlsexttest_CPPFLAGS = $(AM_CPPFLAGS) -ULIBRESSL_INTERNAL
+tlsexttest_SOURCES = tlsexttest.c
+
+# tlstest
+TESTS += tlstest.sh
+check_PROGRAMS += tlstest
+tlstest_SOURCES = tlstest.c
+if !HAVE_PIPE2
+tlstest_SOURCES += compat/pipe2.c
+endif
+EXTRA_DIST += tlstest.sh tlstest.bat
+
+# tls_ext_alpn
+TESTS += tls_ext_alpn
+check_PROGRAMS += tls_ext_alpn
+tls_ext_alpn_SOURCES = tls_ext_alpn.c
+
+# tls_prf
+TESTS += tls_prf
+check_PROGRAMS += tls_prf
+tls_prf_SOURCES = tls_prf.c
+
 # utf8test
 TESTS += utf8test
 check_PROGRAMS += utf8test
 utf8test_SOURCES = utf8test.c
 
+# verifytest
+TESTS += verifytest
+check_PROGRAMS += verifytest
+verifytest_SOURCES = verifytest.c
+
+# x25519test
+TESTS += x25519test
+check_PROGRAMS += x25519test
+x25519test_SOURCES = x25519test.c

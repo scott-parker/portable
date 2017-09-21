@@ -49,10 +49,10 @@ AM_CONDITIONAL([BUILD_CERTHASH], [test "x$ac_cv_func_symlink" = xyes])
 AC_CHECK_FUNC([funopen])
 
 CHECK_LIBC_COMPAT
-CHECK_LIBC_CRYPTO_COMPAT
+CHECK_SYSCALL_COMPAT
+CHECK_CRYPTO_COMPAT
 CHECK_VA_COPY
-
-AC_CHECK_HEADERS([err.h])
+CHECK_B64_NTOP
 
 AC_ARG_WITH([openssldir],
 	AS_HELP_STRING([--with-openssldir],
@@ -78,15 +78,27 @@ AC_TRY_COMPILE([#include "$srcdir/crypto/modes/modes_lcl.h"],
 	       BSWAP4=no)
 CFLAGS="$old_cflags"
 
-case $host_cpu in
-	*sparc*)
-		CPPFLAGS="$CPPFLAGS -D__STRICT_ALIGNMENT"
-		;;
-	*arm*)
-		AS_IF([test "x$BSWAP4" = "xyes"],,
-		    CPPFLAGS="$CPPFLAGS -D__STRICT_ALIGNMENT")
-		;;
-esac
+AS_CASE([$host_cpu],
+	[*sparc*], [CPPFLAGS="$CPPFLAGS -D__STRICT_ALIGNMENT"],
+	[*arm*], AS_IF([test "x$BSWAP4" = "xyes"],,
+		    CPPFLAGS="$CPPFLAGS -D__STRICT_ALIGNMENT"),
+	[*amd64*], [host_cpu=x86_64, HOSTARCH=intel],
+	[i?86], [HOSTARCH=intel],
+	[x86_64], [HOSTARCH=intel]
+)
+AM_CONDITIONAL([HOST_CPU_IS_INTEL], [test "x$HOSTARCH" = "xintel"])
+
+AC_MSG_CHECKING([if .gnu.warning accepts long strings])
+AC_LINK_IFELSE([AC_LANG_SOURCE([[
+extern void SSLv3_method();
+__asm__(".section .gnu.warning.SSLv3_method; .ascii \"SSLv3_method is insecure\" ; .text");
+int main() {return 0;}
+]])], [
+    AC_DEFINE(HAS_GNU_WARNING_LONG, 1, [Define if .gnu.warning accepts long strings.])
+    AC_MSG_RESULT(yes)
+], [
+   AC_MSG_RESULT(no)
+])
 
 AC_ARG_ENABLE([asm],
 	AS_HELP_STRING([--disable-asm], [Disable assembly]))
@@ -98,6 +110,9 @@ AM_CONDITIONAL([HOST_ASM_ELF_X86_64],
 AM_CONDITIONAL([HOST_ASM_MACOSX_X86_64],
     [test "x$HOST_ABI" = "xmacosx" -a "$host_cpu" = "x86_64" -a "x$enable_asm" != "xno"])
 
+# Check if time_t is sized correctly
+AC_CHECK_SIZEOF([time_t], [time.h])
+
 AC_CONFIG_FILES([
 	Makefile
 	include/Makefile
@@ -107,11 +122,29 @@ AC_CONFIG_FILES([
 	tls/Makefile
 	tests/Makefile
 	apps/Makefile
+	apps/ocspcheck/Makefile
+	apps/openssl/Makefile
+	apps/nc/Makefile
 	man/Makefile
 	libcrypto.pc
 	libssl.pc
 	libtls.pc
 	openssl.pc
 ])
+
+AM_CONDITIONAL([SMALL_TIME_T], [test "$ac_cv_sizeof_time_t" = "4"])
+if test "$ac_cv_sizeof_time_t" = "4"; then
+    AC_DEFINE([SMALL_TIME_T])
+    echo " ** Warning, this system is unable to represent times past 2038"
+    echo " ** It will behave incorrectly when handling valid RFC5280 dates"
+
+    if test "$host_os" = "mingw32" ; then
+        echo " **"
+        echo " ** You can solve this by adjusting the build flags in your"
+        echo " ** mingw-w64 toolchain. Refer to README.windows for details."
+    fi
+fi
+
+AC_REQUIRE_AUX_FILE([tap-driver.sh])
 
 AC_OUTPUT
